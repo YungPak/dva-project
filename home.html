@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Box Office Oracle</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 Box Office Oracle</h1>
+            <p class="tagline">Predict movie revenue and understand what drives success</p>
+        </header>
+
+        <div class="main-content">
+            <div class="input-panel">
+                <h2>Movie Details</h2>
+                <form id="movieForm">
+                    <div class="form-group">
+                        <label for="title">Movie Title</label>
+                        <input type="text" id="title" name="title" placeholder="Enter movie title" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="genre">Genre</label>
+                        <select id="genre" name="genre" required>
+                            <option value="">Select genre</option>
+                            <option value="action">Action</option>
+                            <option value="comedy">Comedy</option>
+                            <option value="drama">Drama</option>
+                            <option value="horror">Horror</option>
+                            <option value="sci-fi">Sci-Fi</option>
+                            <option value="romance">Romance</option>
+                            <option value="thriller">Thriller</option>
+                            <option value="animation">Animation</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="budget">Budget (in millions)</label>
+                        <input type="number" id="budget" name="budget" placeholder="e.g., 50" min="0" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="director">Director</label>
+                        <input type="text" id="director" name="director" placeholder="Enter director name" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="cast">Lead Cast</label>
+                        <input type="text" id="cast" name="cast" placeholder="Enter main actors (comma separated)" required>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="releaseMonth">Release Month</label>
+                        <select id="releaseMonth" name="releaseMonth" required>
+                            <option value="">Select month</option>
+                            <option value="1">January</option>
+                            <option value="2">February</option>
+                            <option value="3">March</option>
+                            <option value="4">April</option>
+                            <option value="5">May</option>
+                            <option value="6">June</option>
+                            <option value="7">July</option>
+                            <option value="8">August</option>
+                            <option value="9">September</option>
+                            <option value="10">October</option>
+                            <option value="11">November</option>
+                            <option value="12">December</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="runtime">Runtime (minutes)</label>
+                        <input type="number" id="runtime" name="runtime" placeholder="e.g., 120" min="0" required>
+                    </div>
+
+                    <button type="submit" class="btn-predict">Predict Revenue</button>
+                    <button type="button" class="reset-btn" onclick="resetForm()">Reset Form</button>
+                </form>
+            </div>
+
+            <div class="visualization-panel">
+                <h2>Prediction & Analysis</h2>
+                
+                <div id="predictionResult" class="prediction-result">
+                    <p>Predicted Box Office Revenue:</p>
+                    <div class="prediction-amount" id="predictionAmount">$0</div>
+                </div>
+
+                <img alt="My Image" src="Cast_Collaboration.png" />
+
+                <div id="d3-chart">
+                    D3.js Visualization will appear here after prediction
+                </div>
+                
+            </div>
+        </div>
+    </div>
+
+    <script src="d3.js"></script>
+</body>
+</html>
