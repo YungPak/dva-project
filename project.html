@@ -1,0 +1,520 @@
+<!DOCTYPE html>
+<head>
+<style>
+
+path.link {
+  fill: none;
+  stroke: #666;
+  stroke-width: 1.5px;
+}
+
+circle {
+  fill: #ccc;
+  stroke: #fff;
+  stroke: black;
+  stroke-width: 1.5px;
+}
+
+text {
+  fill: #000;
+  font: 10px sans-serif;
+  pointer-events: none;
+}
+
+</style>
+<meta charset="utf-8">
+<!-- <title></title> -->
+</head>
+
+<body>
+<script type="text/javascript" src="lib/d3.v5.min.js"></script>
+
+<select id = "countryDropdown"></select>
+<select id = "castDropdown"></select>
+
+<script>
+
+var margin = {top:30, right:50, bottom:30, left:50};
+var width = 900 - margin.left - margin.right; // (800)
+var height = 560 - margin.top - margin.bottom; // (500)
+
+var parseTime = d3.timeParse("%Y-%m-%d")
+
+var svg = d3.select("body").append("svg")
+        .attr("width", width)
+        .attr("height", height);
+
+var nodeGroup = svg.append("g").attr("class", "nodes");
+var linkGroup = svg.append("g").attr("class", "links");
+var labels = svg.append("g").attr("class", "labels");
+
+d3.dsv(",", "../data/TMDB  IMDB Movies Dataset-2.csv", function(d) {
+  return {
+    id: +d.id,
+    title: d.title,
+    vote_average: parseFloat(d.vote_average),
+    vote_count: +d.vote_count,
+    status: d.status,
+    release_date: parseTime(d.release_date),
+    revenue: +d.revenue,
+    runtime: +d.runtime,
+    adult: d.adult === "True",
+    backdrop_path: d.backdrop_path,
+    budget: +d.budget,
+    homepage: d.homepage,
+    tconst: d.tconst,
+    original_language: d.original_language,
+    original_title: d.original_title,
+    overview: d.overview,
+    popularity: parseFloat(d.popularity),
+    poster_path: d.poster_path,
+    tagline: d.tagline,
+    genres: d.genres,
+    production_companies: d.production_companies,
+    production_countries: d.production_countries,
+    spoken_languages: d.spoken_languages,
+    keywords: d.keywords,
+    directors: d.directors,
+    writers: d.writers,
+    averageRating: parseFloat(d.averageRating),
+    numVotes: +d.numVotes,
+    cast: d.cast
+  }
+}).then(function(data) {
+
+    // console.log(data);
+
+    let simulation = d3.forceSimulation()
+        // .nodes(d3.values(nodes))
+        .force("link", d3.forceLink().id(d => d.id).distance(100))
+        .force('center', d3.forceCenter(width / 2, height / 2))
+        .force("x", d3.forceX())
+        .force("y", d3.forceY())
+        .force("charge", d3.forceManyBody().strength(-250))
+        .alphaTarget(1)
+        .on("tick", tick);
+
+    var title = svg.append("g")
+                      .attr("id", "title");
+
+    title.append("text")
+            .attr("transform", "translate(350 , 30)")
+            .style("text-anchor", "middle")
+            .style("fill", "black")
+            .style("opacity", 0)
+            .text("Bar Title")
+            .attr("font-size","50");
+
+    countries_set = new Set()
+    for (i=0; i< data.length; i++) {
+        // console.log(data[i]['production_countries'])
+        var countries = data[i]['production_countries'].split(', ');
+
+        for (j = 0; j < countries.length; j++){
+            var country = countries[j];
+            countries_set.add(country);
+        }
+        // break;
+    }
+
+    // console.log(countries_set)
+
+    // enter code to append the countries to the dropdown
+    d3.select("#countryDropdown")
+        .selectAll("option")
+        .data([...countries_set].sort(d3.ascending))
+        .enter().append("option")
+        .attr("value", function(d) {return d;})
+        .text(function(d) {return d;});
+
+    // event listener for the dropdown. Update choropleth and legend when selection changes. Call createMapAndLegend() with required arguments.
+    d3.select("#countryDropdown")
+        .on("change", function(d) {
+            var selectedCountry = d3.select(this)
+                                .property("value");
+            var filtered_data = data.filter(function (d) {return d.production_countries.match(selectedCountry);})
+
+            var casts = getCast(filtered_data, selectedCountry);
+            // console.log(selectedCountry);
+            // console.log(casts);
+            const castDropdown = document.getElementById('castDropdown')
+            castDropdown.innerHTML = '';
+
+            d3.select("#castDropdown")
+                .selectAll("option")
+                .data([...casts].sort(d3.ascending))
+                .enter().append("option")
+                .attr("value", function(d) {return d;})
+                .text(function(d) {return d;});
+
+            d3.select("#castDropdown")
+                .on("change", function(d) {
+                    var selectedCast = d3.select(this)
+                                        .property("value");
+                    var cast_filtered_data = data.filter(function (d) {return d.cast.match(selectedCast);})
+                    var casts_collab = getCast_collab(cast_filtered_data, selectedCast);
+                    // console.log(selectedYear);
+                    
+                    const {nodes, links} = get_source_target(casts_collab);
+                    // get_source_target(casts_collab);
+                    buildGraph(nodes, links, selectedCast);
+
+                    g_title = selectedCast + ' Co - Cast Network';
+
+                    title.selectAll("text")
+                    .style("opacity", 1)
+                    .text(g_title)
+                    .style("font-size", "20px")
+                    .style("font-weight", "bold");
+                });
+        });
+
+    function getCast(filtered_data, selectedCountry) {
+        var casts_set = new Set();
+
+        for (i=0; i < filtered_data.length; i++) {
+        // console.log(filtered_data[i]['cast'])
+        var casts = filtered_data[i]['cast'].split(', ');
+
+        for (j = 0; j < casts.length; j++){
+            var cast = casts[j];
+            casts_set.add(cast);
+        }
+        // break;
+        }
+
+        // console.log(casts_set);
+        // console.log(selectedCountry);
+
+        return casts_set;
+    };
+
+    function getCast_collab(cast_filtered_data, selectedCast) {
+        var casts_collab = {};
+        var all_casts_for_cast = new Set();
+
+        for (i = 0; i < cast_filtered_data.length; i++){
+            var casts = cast_filtered_data[i]['cast'].split(', ');
+            for (j = 0; j < casts.length; j++){
+                if (casts[j]!='') {
+                all_casts_for_cast.add(casts[j]);}
+            }
+        }
+        all_casts_for_cast = [...all_casts_for_cast]
+        // console.log(all_casts_for_cast.length);
+
+        for (i = 0; i < all_casts_for_cast.length; i++){
+            cast = all_casts_for_cast[i];
+            casts_collab[cast] = new Set();
+        }
+        // console.log(casts_collab);
+
+        for (i = 0; i < cast_filtered_data.length; i++){
+            var casts = cast_filtered_data[i]['cast'].split(', ');
+            var cast_revenue = cast_filtered_data[i]['revenue']
+            for (j = 0; j < casts.length; j++){
+                if (casts[j]!='') {
+                    for (k = 0; k < casts.length; k++){
+                        if (casts[j] != casts[k]){
+                            casts_collab[casts[j]].add(casts[k]);
+                            // casts_collab[casts[j]].add({'cast' : casts[k], 'revenue' : revenue})
+                        }
+                    }
+                }
+            }
+        }
+
+        // console.log(casts_collab);
+        return casts_collab;
+    };
+
+    function get_source_target(collab_data){
+        const nodes = Object.keys(collab_data).map(actor => ({id: actor}));
+        const links = [];
+
+        for (const [actor, coactor] of Object.entries(collab_data)){
+            coactor.forEach(cast => {
+                if (!links.some(l => (l.source === cast && l.target === actor) || (l.source === actor && l.target === cast))) {
+                    links.push({source: actor, target: cast});
+                }
+            });
+        }
+
+        // console.log(nodes);
+        // console.log(links);
+
+        return { nodes, links };
+    };
+
+    function buildGraph(nodes, links, selectedCast){
+
+        const link = linkGroup.selectAll("line")
+                        .data(links, d => d.source.id + "-" + d.target.id);
+
+        link.exit().remove();
+
+        link.enter()
+            .append("line")
+            .attr("stroke-width", 2)
+            .style("stroke", "black");
+            // .merge(link);
+
+        const node = nodeGroup.selectAll("circle")
+                        .data(nodes, d => d.id);
+
+        node.exit().remove();
+
+        node.enter()
+            .append("circle")
+            .attr("r", 20)
+            .style("fill", function (d) {
+                if (d.id === selectedCast ){ return "gray";}
+                else {return "skyblue";}
+            })
+            .append("title")
+            .text(function (d) {return d.id})
+            .call(d3.drag()
+                .on("start", dragstarted)
+                .on("drag", dragged)
+                .on("end", dragended));
+            // .merge(node);
+
+        const label = labels.selectAll("text")
+                            .data(nodes, d => d.id);
+
+        label.exit().remove();
+        label.enter()
+        .append("text")
+        .attr("dy", 4)
+        .attr("x", 20)
+        .text(function (d) { return d.id; })
+        .merge(label);
+
+        simulation.nodes(nodes).on("tick", tick);
+        simulation.force("link").links(links);
+        simulation.alpha(1).restart();
+    };
+
+    function tick() {
+
+        linkGroup.selectAll("line")
+        .attr("x1", d => d.source.x)
+        .attr("y1", d => d.source.y)
+        .attr("x2", d => d.target.x)
+        .attr("y2", d => d.target.y);
+
+        nodeGroup.selectAll("circle")
+        .attr("cx", d => d.x)
+        .attr("cy", d => d.y);
+
+        labels.selectAll("text")
+        .attr("x", d => d.x)
+        .attr("y", d => d.y);
+    };
+
+    function dragstarted(d) {
+        console.log('Drag Started');
+        if (!d3.event.active) simulation.alphaTarget(0.3).restart();
+        // event.subject.fx = event.subject.x;
+        // event.subject.fy = event.subject.y;
+        d.fx = d.x;
+        d.fy = d.y;
+    };
+    function dragged(d) {
+        // event.subject.fx = event.x;
+        // event.subject.fy = event.y;
+        d.fx = d3.event.x;
+        d.fy = d3.event.y;
+    };
+    function dragended(event) {
+        if (!d3.event.active) simulation.alphaTarget(0);
+        // event.subject.fx = null;
+        // event.subject.fy = null;
+        d.fx = null;
+        d.fy = null;
+    };
+
+    // var links = data;
+
+    // var nodes = {};
+
+    // // compute the distinct nodes from the links.
+    // links.forEach(function(link) {
+    //     link.source = nodes[link.source] || (nodes[link.source] = {name: link.source, degree:0});
+    //     link.target = nodes[link.target] || (nodes[link.target] = {name: link.target, degree:0});
+    //     link.source.degree += 1;
+    //     link.target.degree += 1;
+    // });
+
+    // let maxDegree = 0;
+
+    // for (let key of Object.keys(nodes)) {
+
+    //     if (nodes[key].degree > maxDegree) {
+    //         maxDegree = nodes[key].degree;
+    //     }
+    // }
+
+    // var width = 1200,
+    //     height = 700;
+
+    // var force = d3.forceSimulation()
+    //     .nodes(d3.values(nodes))
+    //     .force("link", d3.forceLink(links).distance(100))
+    //     .force('center', d3.forceCenter(width / 2, height / 2))
+    //     .force("x", d3.forceX())
+    //     .force("y", d3.forceY())
+    //     .force("charge", d3.forceManyBody().strength(-250))
+    //     .alphaTarget(1)
+    //     .on("tick", tick);
+
+    // var svg = d3.select("body").append("svg")
+    //     .attr("width", width)
+    //     .attr("height", height);
+
+    // // add the links
+    // var path = svg.append("g")
+    //     .selectAll("path")
+    //     .data(links)
+    //     .enter()
+    //     .append("path")
+    //     .attr("class", function(d) { return "link " + d.type; })
+    //     .attr("class","link")
+    //     .style("stroke", function (d){
+    //         if (d.value == 1) {
+    //             return "green";
+    //         }
+    //         else {
+    //             return "gray";
+    //         }
+    //     })
+    //     .style("stroke-dasharray", function(d) {
+    //         if (d.value === 1) {
+    //             return "5,5";
+    //         }
+    //     })
+    //     .style("stroke-width", function (d) {
+    //         if (d.value == 1) {
+    //             return 1;
+    //         }
+    //         else {
+    //             return 2;
+    //         }
+    //     });
+        
+    // // define the nodes
+    // var node = svg.selectAll(".node")
+    //     .data(force.nodes())
+    //     .enter().append("g")
+    //     .attr("class", "node")
+    //     .call(d3.drag()
+    //         .on("start", dragstarted)
+    //         .on("drag", dragged)
+    //         .on("end", dragended));
+
+    // // define color
+    // var color = d3.scaleLinear(d3.interpolateBlues)
+    //             .domain([0, maxDegree])
+    //             .range(["lightblue", "blue"]);
+
+    // // add the nodes
+    // node.append("circle")
+    //     .attr("id", function(d){
+    //         return (d.name.replace(/\s+/g,'').toLowerCase());
+    //     })
+    //     .attr("r", function(d){
+    //         return 5+(d.degree*1.3);
+    //     })
+    //     .style("fill", function (d) {
+    //         return color(d.degree); 
+    //     })
+    //     .on("dblclick", function(d) {
+    //         if (d.fixed == true) { 
+    //             d.fixed = false;
+    //             d3.select(this)
+    //                 .style("fill", function (d) {
+    //                         return color(d.degree); 
+    //                     })
+    //                 .classed("fixed", d.fixed = false);
+    //             if (!d3.event.active) force.alphaTarget(0.3).restart();
+    //             d.fx=null;
+    //             d.fy=null;
+    //         }   
+    // });
+
+    // // add text to nodes
+    // node.append("text")
+    //     .attr("id", "title")
+    //     .attr("dx", 20)
+    //     .attr("dy", -7)
+    //     .style("font-weight", "bold")
+    //     .text(function (d) {
+    //         return d.name;
+    //     });
+
+    // // add the curvy lines
+    // function tick() {
+    //     path.attr("d", function(d) {
+    //         var dx = d.target.x - d.source.x,
+    //             dy = d.target.y - d.source.y,
+    //             dr = Math.sqrt(dx * dx + dy * dy);
+    //         return "M" +
+    //             d.source.x + "," +
+    //             d.source.y + "A" +
+    //             dr + "," + dr + " 0 0,1 " +
+    //             d.target.x + "," +
+    //             d.target.y;
+    //     });
+
+    //     node.attr("transform", function(d) {
+    //         return "translate(" + d.x + "," + d.y + ")"; 
+    //     });
+    // };
+
+    // function dragstarted(d) {
+    //     if (!d3.event.active) force.alphaTarget(0.3).restart();
+    //     d.fx = d.x;
+    //     d.fy = d.y;
+    //     // d.fixed = true;
+        
+    // };
+
+    // function dragged(d) {
+    //     d.fx = d3.event.x;
+    //     d.fy = d3.event.y;
+    //     d.fixed = true;
+    //     d3.select(this)
+    //     .select("circle")
+    //     .style("fill","yellow");
+    // };
+
+    // function dragended(d) {
+    //     if (!d3.event.active) force.alphaTarget(0.3).restart();
+    //     if (d.fixed == true) {
+    //         // d.fixed = false;
+    //         d.fx = d.x;
+    //         d.fy = d.y;
+    //     }
+    //     else {
+    //         d.fx = null;
+    //         d.fy = null;
+    //         // d.fixed = true;
+    //     }
+    // };
+
+    // // Add GT username
+    // svg.append("text")
+    // .attr("id","credit")
+    // .attr("transform", "translate("+ (width*0.7) + " ," + (height/7) + ")")
+    // .style("text-anchor", "end")
+    // .style("font-weight", "bold")
+    // .text("hpatel458")
+    // .attr("font-size","20")
+  
+}).catch(function(error) {
+  console.log(error);
+});
+
+</script>
+</body>
+</html>
