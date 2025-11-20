@@ -1,0 +1,9 @@
+pandas
+numpy
+scikit-learn
+xgboost
+shap
+Flask
+flask-cors
+joblib
+category_encoders

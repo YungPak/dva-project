@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Box Office Oracle: Prediction & Explanations</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        /* --- CSS STYLES --- */
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); min-height: 100vh; padding: 20px; position: relative; }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header { text-align: center; color: white; margin-bottom: 40px; }
+        h1 { font-size: 2.5em; margin-bottom: 10px; text-shadow: 2px 2px 4px rgba(0,0,0,0.3); }
+        .tagline { font-size: 1.1em; opacity: 0.9; }
+        .main-content { display: grid; grid-template-columns: 400px 1fr; gap: 30px; align-items: start; }
+        
+        /* Panels */
+        .input-panel, .visualization-panel { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 10px 30px rgba(0,0,0,0.2); position: relative; }
+        .visualization-panel { min-height: 800px; } 
+        
+        /* Form Elements */
+        .form-group { margin-bottom: 20px; }
+        label { display: block; margin-bottom: 8px; color: #333; font-weight: 600; }
+        input, select { width: 100%; padding: 12px; border: 2px solid #e0e0e0; border-radius: 6px; font-size: 14px; }
+        input:focus, select:focus { outline: none; border-color: #667eea; }
+        .btn-predict { width: 100%; padding: 15px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; border: none; border-radius: 6px; font-size: 16px; font-weight: 600; cursor: pointer; transition: transform 0.2s; }
+        .btn-predict:hover { transform: translateY(-2px); }
+        .reset-btn { margin-top: 15px; padding: 10px; background: #f0f0f0; border: 2px solid #ddd; border-radius: 6px; cursor: pointer; width: 100%; }
+
+        /* Loading */
+        .loading-overlay { position: absolute; top: 0; left: 0; right: 0; bottom: 0; background: rgba(255, 255, 255, 0.9); display: none; flex-direction: column; align-items: center; justify-content: center; z-index: 20; border-radius: 12px; }
+        .loading-overlay.active { display: flex; }
+        .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #667eea; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 15px; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* Results */
+        .prediction-result { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px; border-radius: 8px; margin-bottom: 30px; display: none; text-align: center; }
+        .prediction-result.show { display: block; }
+        .prediction-amount { font-size: 3em; font-weight: bold; margin-top: 10px; text-shadow: 1px 1px 3px rgba(0,0,0,0.2); }
+
+        /* D3 Charts */
+        #d3-chart { width: 100%; height: 450px; margin-bottom: 30px; position: relative; }
+        
+        /* SHAP Styles */
+        .bar-positive { fill: #4CAF50; transition: opacity 0.2s; } 
+        .bar-negative { fill: #F44336; transition: opacity 0.2s; } 
+        .bar-total { fill: #667eea; transition: opacity 0.2s; }
+        .connector { stroke: #ccc; stroke-dasharray: 3,3; }
+        
+        /* Network Chart Styles */
+        .network-section { border-top: 1px solid #eee; padding-top: 20px; margin-top: 20px; }
+        #network-chart { width: 100%; height: 500px; background: #fafafa; border: 1px solid #eee; border-radius: 8px; overflow: hidden; position: relative; }
+        
+        .network-node circle { stroke: #fff; stroke-width: 2px; cursor: grab; transition: fill 0.2s; }
+        .network-node text { font-size: 10px; pointer-events: none; text-shadow: 0 1px 0 #fff, 1px 0 0 #fff, 0 -1px 0 #fff, -1px 0 0 #fff; }
+        .network-link { stroke: #999; stroke-opacity: 0.6; }
+        
+        .controls { display: flex; gap: 10px; margin-bottom: 15px; }
+        .control-group { flex: 1; }
+        
+        /* TOOLTIP STYLES */
+        .tooltip { 
+            position: absolute; 
+            padding: 10px; 
+            background: rgba(0,0,0,0.9); 
+            color: white; 
+            border-radius: 6px; 
+            pointer-events: none; 
+            font-size: 12px; 
+            opacity: 0; 
+            z-index: 9999;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            transition: opacity 0.1s;
+            border: 1px solid rgba(255,255,255,0.1);
+            max-width: 200px;
+            line-height: 1.4;
+        }
+
+        @media (max-width: 1024px) { .main-content { grid-template-columns: 1fr; } }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🎬 Box Office Oracle</h1>
+            <p class="tagline">Interactive Revenue Prediction & Network Analysis</p>
+        </header>
+
+        <div class="main-content">
+            <!-- LEFT PANEL: INPUTS -->
+            <div class="input-panel">
+                <div class="loading-overlay" id="loadingOverlay">
+                    <div class="spinner"></div>
+                    <p style="color: #667eea; font-weight: bold;">Consulting the Oracle...</p>
+                </div>
+                
+                <h2>Movie Details</h2>
+                <p style="font-size: 0.85em; color: #666; margin-bottom: 20px;">Enter details to predict revenue.</p>
+                
+                <form id="movieForm">
+                    <div class="form-group"><label>Movie Title</label><input type="text" id="title" value="The Oracle Project"></div>
+                    <div class="form-group">
+                        <label>Genre</label>
+                        <select id="genre" required>
+                            <option value="Action">Action</option><option value="Comedy">Comedy</option><option value="Drama">Drama</option>
+                            <option value="Horror">Horror</option><option value="Romance">Romance</option><option value="Thriller">Thriller</option>
+                        </select>
+                    </div>
+                    <div class="form-group"><label>Budget ($M)</label><input type="number" id="budget" value="100" min="1"></div>
+                    <div class="form-group"><label>Director</label><input type="text" id="director" value="Steven Spielberg"></div>
+                    <div class="form-group"><label>Lead Cast</label><input type="text" id="cast" value="Tom Cruise"></div>
+                    <div class="form-group"><label>Runtime (min)</label><input type="number" id="runtime" value="120" min="30"></div>
+                    
+                    <button type="submit" class="btn-predict">Predict Revenue</button>
+                    <button type="button" class="reset-btn" onclick="resetForm()">Reset</button>
+                </form>
+            </div>
+
+            <!-- RIGHT PANEL: VISUALIZATIONS -->
+            <div class="visualization-panel">
+                <h2>Prediction Analysis</h2>
+                
+                <!-- 1. Result Box -->
+                <div id="predictionResult" class="prediction-result">
+                    <p style="opacity: 0.9;">Predicted Box Office Revenue</p>
+                    <div class="prediction-amount" id="predictionAmount">$0M</div>
+                </div>
+                
+                <!-- 2. SHAP Chart -->
+                <div id="d3-chart">
+                    <div style="text-align: center; padding-top: 100px; color: #ccc;">
+                        <p>SHAP Waterfall Chart will appear here.</p>
+                    </div>
+                </div>
+                
+                <!-- 3. Network Graph (New Integration) -->
+                <div class="network-section">
+                    <h3>Actor Collaboration Network</h3>
+                    <p style="font-size: 0.85em; color: #666; margin-bottom: 10px;">
+                        Explore how actors connect within specific countries. (Data loaded from CSV)
+                    </p>
+                    
+                    <!-- Network Controls -->
+                    <div class="controls">
+                        <div class="control-group">
+                            <label style="font-size: 0.8em;">Select Country:</label>
+                            <select id="countryDropdown" style="padding: 8px;"><option>Loading data...</option></select>
+                        </div>
+                        <div class="control-group">
+                            <label style="font-size: 0.8em;">Select Actor:</label>
+                            <select id="castDropdown" style="padding: 8px;"><option>Select Country First</option></select>
+                        </div>
+                    </div>
+
+                    <!-- Network Chart Container -->
+                    <div id="network-chart"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Tooltip Container -->
+    <div id="d3-tooltip" class="tooltip"></div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const API_URL = "http://127.0.0.1:5000/predict";
+        const DATA_CSV_PATH = "imdb.csv"; 
+
+        // --- PART 1: PREDICTION LOGIC (SHAP) ---
+        document.getElementById('movieForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const loading = document.getElementById('loadingOverlay');
+            loading.classList.add('active');
+            
+            try {
+                const formData = {
+                    title: document.getElementById('title').value,
+                    genre: document.getElementById('genre').value,
+                    budget: parseFloat(document.getElementById('budget').value),
+                    director: document.getElementById('director').value,
+                    cast: document.getElementById('cast').value,
+                    runtime: parseInt(document.getElementById('runtime').value)
+                };
+
+                const response = await fetch(API_URL, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(formData)
+                });
+
+                if (!response.ok) throw new Error('API Error');
+                const result = await response.json();
+                
+                // Update Result
+                document.getElementById('predictionAmount').textContent = `$${result.prediction.toFixed(2)}M`;
+                document.getElementById('predictionResult').classList.add('show');
+                
+                // Render Waterfall
+                renderWaterfallChart(result);
+                
+            } catch (err) {
+                alert("Prediction Failed. Is the Flask server running?");
+                console.error(err);
+            } finally {
+                loading.classList.remove('active');
+            }
+        });
+
+        function renderWaterfallChart(shapData) {
+            const container = d3.select("#d3-chart");
+            container.html("");
+            const margin = {top: 30, right: 30, bottom: 30, left: 150};
+            const width = container.node().clientWidth - margin.left - margin.right;
+            const height = 400 - margin.top - margin.bottom;
+            
+            const svg = container.append("svg")
+                .attr("width", width + margin.left + margin.right)
+                .attr("height", height + margin.top + margin.bottom)
+                .append("g").attr("transform", `translate(${margin.left},${margin.top})`);
+
+            // Data Prep
+            let cumulative = shapData.base_value;
+            const data = [{label: "Base", start: 0, end: cumulative, val: cumulative, type: "total"}];
+            shapData.feature_contributions.forEach(d => {
+                const start = cumulative;
+                cumulative += d.impact;
+                data.push({label: d.feature, start: start, end: cumulative, val: d.impact, type: d.impact>=0?"pos":"neg"});
+            });
+            data.push({label: "Final", start: 0, end: cumulative, val: cumulative, type: "total"});
+
+            // Scales
+            const y = d3.scaleBand().domain(data.map(d=>d.label)).range([0, height]).padding(0.3);
+            const xMin = d3.min(data, d=>Math.min(d.start, d.end));
+            const xMax = d3.max(data, d=>Math.max(d.start, d.end));
+            const x = d3.scaleLinear().domain([Math.min(0, xMin), xMax]).range([0, width]);
+
+            // Draw Axes
+            svg.append("g").call(d3.axisLeft(y));
+            svg.append("g").attr("transform", `translate(0,${height})`).call(d3.axisBottom(x).ticks(5));
+            
+            // Draw Bars with Tooltips
+            svg.selectAll(".bar").data(data).enter().append("rect")
+                .attr("y", d=>y(d.label))
+                .attr("height", y.bandwidth())
+                .attr("x", d=>x(Math.min(d.start, d.end)))
+                .attr("width", d=>Math.abs(x(d.start)-x(d.end)))
+                .attr("fill", d=> d.type==="total"?"#667eea": (d.type==="pos"?"#4CAF50":"#F44336"))
+                .style("cursor", "pointer")
+                .on("mouseover", function(event, d) {
+                    d3.select(this).style("opacity", 0.8);
+                    const tooltip = d3.select("#d3-tooltip");
+                    
+                    let content = `<strong>${d.label}</strong><br>`;
+                    if (d.type === "total") {
+                        content += `Value: $${d.val.toFixed(2)}M`;
+                    } else {
+                        content += `Impact: ${d.val > 0 ? '+' : ''}${d.val.toFixed(2)}M`;
+                    }
+                    
+                    tooltip.html(content)
+                        .style("left", (event.pageX + 15) + "px")
+                        .style("top", (event.pageY - 10) + "px")
+                        .style("opacity", 1);
+                })
+                .on("mouseout", function() {
+                    d3.select(this).style("opacity", 1);
+                    d3.select("#d3-tooltip").style("opacity", 0);
+                });
+        }
+
+        // --- PART 2: NETWORK GRAPH LOGIC ---
+        console.log("Network Graph: Initializing...");
+        
+        d3.csv(DATA_CSV_PATH).then(function(data) {
+            console.log("Network Graph: CSV Data Loaded successfully.", data.length, "rows");
+            
+            // 1. Populate Country Dropdown
+            const countries = new Set();
+            data.forEach(d => {
+                if(d.production_countries) {
+                    d.production_countries.split(', ').forEach(c => {
+                        let country = c.trim().replace(/['"\[\]]/g, ''); 
+                        if(country) countries.add(country);
+                    });
+                }
+            });
+            
+            const countrySelect = d3.select("#countryDropdown");
+            countrySelect.html('<option value="">Select Country</option>');
+            const sortedCountries = Array.from(countries).sort();
+            sortedCountries.forEach(c => {
+                countrySelect.append("option").text(c).attr("value", c);
+            });
+
+            // 2. Handle Country Change -> Update Actor Dropdown
+            countrySelect.on("change", function() {
+                const selectedCountry = this.value;
+                if(!selectedCountry) return;
+                
+                const filteredData = data.filter(d => d.production_countries && d.production_countries.includes(selectedCountry));
+                const casts = new Set();
+                
+                filteredData.forEach(d => {
+                    if(d.cast) {
+                        d.cast.split(', ').forEach(c => {
+                            let actor = c.trim().replace(/['"\[\]]/g, '');
+                            if(actor) casts.add(actor);
+                        });
+                    }
+                });
+                
+                const castSelect = d3.select("#castDropdown");
+                castSelect.html('<option value="">Select Actor</option>');
+                const sortedCasts = Array.from(casts).sort();
+                sortedCasts.forEach(c => {
+                    castSelect.append("option").text(c).attr("value", c);
+                });
+                
+                d3.select("#network-chart").html("");
+            });
+
+            // 3. Handle Actor Change -> Render Graph
+            d3.select("#castDropdown").on("change", function() {
+                const selectedActor = this.value;
+                const selectedCountry = d3.select("#countryDropdown").property("value");
+                if(!selectedActor) return;
+                
+                const actorMovies = data.filter(d => 
+                    d.production_countries && d.production_countries.includes(selectedCountry) && 
+                    d.cast && d.cast.includes(selectedActor)
+                );
+                
+                buildNetworkGraph(actorMovies, selectedActor);
+            });
+
+        }).catch(err => {
+            console.error("Network Graph Error: Could not load CSV.", err);
+            d3.select("#network-chart").html(`<div style="padding:20px; text-align:center;">
+                <p style="color:red; font-weight:bold;">Error Loading Network Data</p>
+                <p style="font-size:0.9em">Could not load '${DATA_CSV_PATH}'.</p>
+                <p style="font-size:0.8em; color:#555;">Ensure 'imdb.csv' is in the folder and run via local server.</p>
+            </div>`);
+        });
+
+        function buildNetworkGraph(movies, centerActor) {
+            const container = d3.select("#network-chart");
+            container.html("");
+            const width = container.node().clientWidth;
+            const height = 500;
+
+            const svg = container.append("svg").attr("width", width).attr("height", height);
+            
+            // Build Links
+            const collabCounts = {}; 
+            movies.forEach(m => {
+                if(!m.cast) return;
+                const castList = m.cast.split(', ').map(c => c.trim().replace(/['"\[\]]/g, ''));
+                castList.forEach(c => {
+                    if(c !== centerActor && c.length > 0) {
+                        collabCounts[c] = (collabCounts[c] || 0) + 1;
+                    }
+                });
+            });
+
+            const nodes = [{id: centerActor, group: 1, r: 20}];
+            const links = [];
+            const topCollaborators = Object.entries(collabCounts).sort((a,b) => b[1] - a[1]).slice(0, 20);
+
+            topCollaborators.forEach(([actor, count]) => {
+                nodes.push({id: actor, group: 2, r: 5 + (count * 2)}); 
+                links.push({source: centerActor, target: actor, value: count});
+            });
+            
+            if(nodes.length === 1) {
+                 svg.append("text").attr("x", width/2).attr("y", height/2).attr("text-anchor", "middle").text("No co-stars found.").attr("fill", "#999");
+                 return;
+            }
+
+            const simulation = d3.forceSimulation(nodes)
+                .force("link", d3.forceLink(links).id(d => d.id).distance(120))
+                .force("charge", d3.forceManyBody().strength(-400))
+                .force("center", d3.forceCenter(width / 2, height / 2));
+
+            const link = svg.append("g").selectAll("line").data(links).enter().append("line")
+                .attr("class", "network-link").attr("stroke-width", d => Math.sqrt(d.value) + 1);
+
+            const node = svg.append("g").selectAll("g").data(nodes).enter().append("g")
+                .attr("class", "network-node")
+                .call(d3.drag().on("start", dragstarted).on("drag", dragged).on("end", dragended));
+
+            node.append("circle").attr("r", d => d.r).attr("fill", d => d.group === 1 ? "#667eea" : "#ff9800").attr("stroke", "#fff").attr("stroke-width", 2);
+            node.append("text").text(d => d.id).attr("x", 15).attr("y", 4).style("font-weight", "bold");
+
+            simulation.on("tick", () => {
+                link.attr("x1", d => d.source.x).attr("y1", d => d.source.y).attr("x2", d => d.target.x).attr("y2", d => d.target.y);
+                node.attr("transform", d => `translate(${d.x},${d.y})`);
+            });
+
+            function dragstarted(event, d) {
+                if (!event.active) simulation.alphaTarget(0.3).restart();
+                d.fx = d.x; d.fy = d.y;
+            }
+            function dragged(event, d) {
+                d.fx = event.x; d.fy = event.y;
+            }
+            function dragended(event, d) {
+                if (!event.active) simulation.alphaTarget(0);
+                d.fx = null; d.fy = null;
+            }
+        }
+    </script>
+</body>
+</html>
